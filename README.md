@@ -1,2 +1,2 @@
-Hand-Detector-In-NaCl
+Face-Detector-In-NaCl
 =====================
