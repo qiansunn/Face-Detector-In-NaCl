@@ -1,7 +1,3 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 #include <vector>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,6 +6,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <sys/time.h>
+
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/cpp/completion_callback.h"
 #include "ppapi/cpp/instance.h"
@@ -30,13 +27,11 @@
 
 #include "nacl_io/nacl_io.h"
 
-
 using namespace std;
 using namespace cv;
+
 extern int errno;
 stringstream err;
-
-
 
 // When compiling natively on Windows, PostMessage can be #define-d to
 // something else.
@@ -52,11 +47,11 @@ class MediaStreamVideoModule : public pp::Module {
  public:
   MediaStreamVideoModule() : pp::Module() {}
   virtual ~MediaStreamVideoModule() {}
+  
   virtual pp::Instance* CreateInstance(PP_Instance instance);
 };
 
-
-class MediaStreamVideoDemoInstance : public pp::Instance{
+class MediaStreamVideoDemoInstance : public pp::Instance {
  public:
   MediaStreamVideoDemoInstance(PP_Instance instance, pp::Module* module);
   virtual ~MediaStreamVideoDemoInstance();
@@ -65,31 +60,37 @@ class MediaStreamVideoDemoInstance : public pp::Instance{
   virtual void HandleMessage(const pp::Var& message_data);
  
  private:
-  //fps
+  //use for count fps
   struct timeval start;
   struct timeval end;
+  
+  // GL-related functions.
   void ConfigureTrack();
-  void RecognizeFace(pp::VideoFrame frame);
+  
   // MediaStreamVideoTrack callbacks.
   void OnConfigure(int32_t result);
   void OnGetFrame(int32_t result, pp::VideoFrame frame);
+  
+  //Recognize-related functions
   static void *HandleThread(void* arg);
-  pp::Size position_size_;
+  void RecognizeFace(pp::VideoFrame frame);
+  
   pp::MediaStreamVideoTrack video_track_;
   pp::CompletionCallbackFactory<MediaStreamVideoDemoInstance> callback_factory_;
-  std::vector<int32_t> attrib_list_;
+  pthread_t thread;
+  
   // MediaStreamVideoTrack attributes:
   PP_VideoFrame_Format attrib_format_;
   int32_t attrib_width_;
   int32_t attrib_height_;
-  pthread_t thread;
+  
+  //OpenCV attributes:
   IplImage* frame_;
   IplImage* small_img;
   CascadeClassifier face_cascade;
   pp::Size frame_size_;
-  String cascadeFilename;
+  String cascadefile;
 };
-
 
 MediaStreamVideoDemoInstance::MediaStreamVideoDemoInstance(
     PP_Instance instance, pp::Module* module)
@@ -98,57 +99,55 @@ MediaStreamVideoDemoInstance::MediaStreamVideoDemoInstance(
       attrib_format_(PP_VIDEOFRAME_FORMAT_BGRA),
       attrib_width_(0),
       attrib_height_(0),
-      frame_(NULL)
-    {
-    gettimeofday(&start,NULL);
-    gettimeofday(&end,NULL);
-    nacl_io_init_ppapi(pp::Instance::pp_instance(), pp::Module::Get()->get_browser_interface());
-    umount("/");
-    errno = 0;
-    if(mount("","/","httpfs",0,"")!=0) {
-      err << "mount httpfs failed!! errno:" << errno;
-      this->PostMessage(pp::Var(err.str()));
-    }
-    if(pthread_create(&thread, NULL, HandleThread, (void *)this)!=0) {	
-      err << "create openxml thread failed!! errno:" << errno;
-      this->PostMessage(pp::Var(err.str()));
-    }
-    small_img = cvCreateImage(cvSize(320, 240), IPL_DEPTH_8U, 4);
+      frame_(NULL) {
+  gettimeofday(&start,NULL);
+  gettimeofday(&end,NULL);
+  nacl_io_init_ppapi(pp::Instance::pp_instance(), pp::Module::Get()->get_browser_interface());
+  umount("/");
+  errno = 0;
+  if (mount("","/","httpfs",0,"")) {
+    err << "Unable to mount httpfs! error:" << errno;
+    LogToConsole(PP_LOGLEVEL_ERROR, pp::Var(err.str()));
+    //this->PostMessage(pp::Var(err.str()));
+    assert(false);
+  }
+  if (pthread_create(&thread, NULL, HandleThread, (void *)this)) {
+    err << "Unable to initialize HandleThread! error:" << errno;
+    LogToConsole(PP_LOGLEVEL_ERROR, pp::Var(err.str()));
+    //this->PostMessage(pp::Var(err.str()));
+    assert(false);
+  }
+  small_img = cvCreateImage(cvSize(320, 240), IPL_DEPTH_8U, 4);
 }
-
 
 MediaStreamVideoDemoInstance::~MediaStreamVideoDemoInstance() {
 }
 
-
 void* MediaStreamVideoDemoInstance::HandleThread(void* arg) {
   MediaStreamVideoDemoInstance *ptr = (MediaStreamVideoDemoInstance *)arg;
-  const char *cascadeFilename = "haarcascade_frontalface_default.xml"; 
-  if(!ptr->face_cascade.load(cascadeFilename)) {
-    err << "face_cascade.load error" ;
-    ptr->PostMessage(pp::Var(err.str()));
+  const char *cascadefile = "haarcascade_frontalface_default.xml"; 
+  if (!ptr->face_cascade.load(cascadefilename)) {
+    LogToConsole(PP_LOGLEVEL_ERROR, pp::Var("Unable to load casscade file!"));
+    //ptr->PostMessage(pp::Var(err.str()));
+    assert(false);
   }
-  else {
-    err << "face_cascade.load success" ;
-    ptr->PostMessage(pp::Var(err.str()));
-  }
-    return ((void *)0);
+  return ((void *)0);
 }
-
 
 void MediaStreamVideoDemoInstance::HandleMessage(const pp::Var& var_message) {
-  if (!var_message.is_dictionary())
+  // Ignore the message if it is not a dictionary.
+  if (!var_message.is_dictionary()) {
     return;
+  }
   pp::VarDictionary var_dictionary_message(var_message);
   pp::Var var_track = var_dictionary_message.Get("track");
-  if (!var_track.is_resource())
-      return;
+  if (!var_track.is_resource()) {
+    return;
+  }
   pp::Resource resource_track = var_track.AsResource();
   video_track_ = pp::MediaStreamVideoTrack(resource_track);
- 
-    ConfigureTrack();
+  ConfigureTrack();
 }
-
 
 void MediaStreamVideoDemoInstance::ConfigureTrack() {
   const int32_t attrib_list[] = {
@@ -158,15 +157,13 @@ void MediaStreamVideoDemoInstance::ConfigureTrack() {
       PP_MEDIASTREAMVIDEOTRACK_ATTRIB_NONE
     };
   video_track_.Configure(attrib_list, callback_factory_.NewCallback(
-        &MediaStreamVideoDemoInstance::OnConfigure));
+      &MediaStreamVideoDemoInstance::OnConfigure));
 }
-
 
 void MediaStreamVideoDemoInstance::OnConfigure(int32_t result) {
   video_track_.GetFrame(callback_factory_.NewCallbackWithOutput(
       &MediaStreamVideoDemoInstance::OnGetFrame));
 }
-
 
 void MediaStreamVideoDemoInstance::OnGetFrame(
     int32_t result, pp::VideoFrame frame) {
@@ -175,10 +172,9 @@ void MediaStreamVideoDemoInstance::OnGetFrame(
   RecognizeFace(frame);
   video_track_.RecycleFrame(frame);
   video_track_.GetFrame(callback_factory_.NewCallbackWithOutput(
-        &MediaStreamVideoDemoInstance::OnGetFrame));
+      &MediaStreamVideoDemoInstance::OnGetFrame));
   
 }
-
 
 void MediaStreamVideoDemoInstance::RecognizeFace(pp::VideoFrame frame){
   char* data = static_cast<char*>(frame.GetDataBuffer());
@@ -212,8 +208,6 @@ void MediaStreamVideoDemoInstance::RecognizeFace(pp::VideoFrame frame){
   fprintf(stderr,"\nfps:%f",1/(duration/1000000));
   gettimeofday(&start,NULL);
 }
-
-
 
 pp::Instance* MediaStreamVideoModule::CreateInstance(PP_Instance instance) {
   return new MediaStreamVideoDemoInstance(instance, this);
