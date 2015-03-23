@@ -73,7 +73,7 @@ class MediaStreamVideoDemoInstance : public pp::Instance {
   
   //Recognize-related functions
   static void *HandleThread(void* arg);
-  void RecognizeFace(pp::VideoFrame frame);
+  void CvtFrame(pp::VideoFrame frame);
   
   pp::MediaStreamVideoTrack video_track_;
   pp::CompletionCallbackFactory<MediaStreamVideoDemoInstance> callback_factory_;
@@ -169,14 +169,14 @@ void MediaStreamVideoDemoInstance::OnGetFrame(
     int32_t result, pp::VideoFrame frame) {
   if (result != PP_OK)
     return;
-  RecognizeFace(frame);
+  CvtFrame(frame);
   video_track_.RecycleFrame(frame);
   video_track_.GetFrame(callback_factory_.NewCallbackWithOutput(
       &MediaStreamVideoDemoInstance::OnGetFrame));
   
 }
 
-void MediaStreamVideoDemoInstance::RecognizeFace(pp::VideoFrame frame){
+void MediaStreamVideoDemoInstance::CvtFrame(pp::VideoFrame frame){
   char* data = static_cast<char*>(frame.GetDataBuffer());
   pp::Size size;
   frame.GetSize(&size);
@@ -187,6 +187,7 @@ void MediaStreamVideoDemoInstance::RecognizeFace(pp::VideoFrame frame){
   int32_t height = frame_size_.height();
   stringstream ss;
   ss.clear();
+  
   std::vector<Rect> faces;
   Mat frame_gray;
   if(!frame_)frame_= cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 4);
@@ -196,6 +197,7 @@ void MediaStreamVideoDemoInstance::RecognizeFace(pp::VideoFrame frame){
   equalizeHist( frame_gray, frame_gray );
   //-- Detect faces
   face_cascade.detectMultiScale( frame_gray, faces, 1.1, 2, 0|CV_HAAR_SCALE_IMAGE, Size(30, 30) );
+  
   ss << "[";
   for( unsigned int i = 0; i < faces.size(); i++ ) {
     ss << "{" << "x:" << faces[i].x << ",width:" << faces[i].width
