@@ -126,8 +126,8 @@ MediaStreamVideoDemoInstance::~MediaStreamVideoDemoInstance() {
 void* MediaStreamVideoDemoInstance::HandleThread(void* arg) {
   MediaStreamVideoDemoInstance *ptr = (MediaStreamVideoDemoInstance *)arg;
   const char *cascadefile = "haarcascade_frontalface_default.xml"; 
-  if (!ptr->face_cascade.load(cascadefilename)) {
-    LogToConsole(PP_LOGLEVEL_ERROR, pp::Var("Unable to load casscade file!"));
+  if (!ptr->face_cascade.load(cascadefile)) {
+    //LogToConsole(PP_LOGLEVEL_ERROR, pp::Var("Unable to load casscade file!"));
     //ptr->PostMessage(pp::Var(err.str()));
     assert(false);
   }
